@@ -5,14 +5,17 @@ SOURCES := \
     radix_2_butterfly_tb.sv \
     radix_2_butterfly.sv \
     fifo.sv \
-    dp_ram.sv
+    dp_ram.sv \
+    complex_types.svh
 
 TB := radix_2_butterfly_tb.sv
 
 EXECUTABLE := $(shell echo "./obj_dir/V$(TB)" | sed 's/.sv//g')
 
 DISABLED_WARNINGS := \
-    -Wno-PINMISSING
+    -Wno-PINMISSING \
+    -Wno-WIDTHTRUNC \
+    -Wno-WIDTHEXPAND
     
 .PHONY: all clean
 

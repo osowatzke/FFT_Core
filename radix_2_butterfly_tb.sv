@@ -1,7 +1,8 @@
 `timescale 1ns/1ns
+`include "complex_types.svh"
 
 module radix_2_butterfly_tb #(
-    parameter DATA_WIDTH = 32,
+    parameter DATA_WIDTH = 16,
     parameter CLK_PERIOD = 10,
     parameter RESET_TIME = 100);
 
@@ -24,42 +25,61 @@ module radix_2_butterfly_tb #(
     
     assign #(CLK_PERIOD/2) clk = !clk;
     
-    logic [DATA_WIDTH-1:0] dataVar;
-    logic [DATA_WIDTH-1:0] dataR;
+    logic [DATA_WIDTH-1:0] dataReVar;
+    logic [DATA_WIDTH-1:0] dataImVar;
+    logic [DATA_WIDTH-1:0] dataReR;
+    logic [DATA_WIDTH-1:0] dataImR;
     logic validR;
     
     logic wrCntR;
-    logic [DATA_WIDTH:0] sumWrDataR;
-    logic [DATA_WIDTH:0] diffWrDataR;
+    logic [DATA_WIDTH:0] sumReVar;
+    logic [DATA_WIDTH:0] sumImVar;
+    logic [DATA_WIDTH:0] diffReVar;
+    logic [DATA_WIDTH:0] diffImVar;
+    logic [2*DATA_WIDTH+1:0] sumWrDataR;
+    logic [2*DATA_WIDTH+1:0] diffWrDataR;
     logic fifoWrValidR;
     
     always @(posedge clk) begin
         if (rst) begin
-            dataR               <= 0;
+            dataReR             <= 0;
+            dataImR             <= 0;
             validR              <= 0;
             wrCntR              <= 0;
             sumWrDataR          <= 0;
             diffWrDataR         <= 0;
             fifoWrValidR        <= 0;
         end else begin
-            dataVar             = $random;
-            dataR               <= dataVar;
+            dataReVar            = $random;
+            dataImVar            = $random;
+            dataReR             <= dataReVar;
+            dataImR             <= dataImVar;
             validR              <= 1;
             wrCntR              <= wrCntR + 1;
             fifoWrValidR        <= 0;
             if (wrCntR == 1) begin
                 wrCntR          <= 0;
                 fifoWrValidR    <= 1;
-                sumWrDataR      <= $signed({dataR[DATA_WIDTH-1], dataR}) +
-                                   $signed({dataVar[DATA_WIDTH-1], dataVar});
-                diffWrDataR     <= $signed({dataR[DATA_WIDTH-1], dataR}) -
-                                   $signed({dataVar[DATA_WIDTH-1], dataVar});
+                sumReVar         = $signed({dataReR[DATA_WIDTH-1], dataReR}) +
+                                   $signed({dataReVar[DATA_WIDTH-1], dataReVar});
+                sumImVar         = $signed({dataImR[DATA_WIDTH-1], dataImR}) +
+                                   $signed({dataImVar[DATA_WIDTH-1], dataImVar});
+                diffReVar        = $signed({dataReR[DATA_WIDTH-1], dataReR}) -
+                                   $signed({dataReVar[DATA_WIDTH-1], dataReVar});
+                diffImVar        = $signed({dataImR[DATA_WIDTH-1], dataImR}) -
+                                   $signed({dataImVar[DATA_WIDTH-1], dataImVar});
+                sumWrDataR      <= {sumImVar, sumReVar};
+                diffWrDataR     <= {diffImVar, diffReVar};
             end
         end
     end
     
     logic resultValid;
-    logic [DATA_WIDTH:0] result;
+    ComplexType data;
+    ComplexType result;
+    
+    assign data.re = packReal(dataReR, DATA_WIDTH);
+    assign data.im = packReal(dataImR, DATA_WIDTH);
 
     radix_2_butterfly #(
         .DATA_WIDTH(DATA_WIDTH))
@@ -67,7 +87,7 @@ module radix_2_butterfly_tb #(
         .clkIn(clk),
         .rstIn(rst),
         .enIn(1'b1),
-        .dataIn(dataR),
+        .dataIn(data),
         .validIn(validR),
         .validOut(resultValid),
         .dataOut(result));
@@ -75,12 +95,12 @@ module radix_2_butterfly_tb #(
     logic rdCntR;
     logic sumRdValid;
     logic sumRdConsent;
-    logic [DATA_WIDTH:0] sumRdData;
+    logic [2*DATA_WIDTH+1:0] sumRdData;
     
     assign sumRdConsent = (rdCntR == 0) ? resultValid : 0;
     
     fifo #(
-        .DATA_WIDTH(DATA_WIDTH+1))
+        .DATA_WIDTH(2*(DATA_WIDTH+1)))
         sum_fifo (
         .clkIn(clk),
         .rstIn(rst),
@@ -92,12 +112,12 @@ module radix_2_butterfly_tb #(
     
     logic diffRdValid;
     logic diffRdConsent;
-    logic [DATA_WIDTH:0] diffRdData;
+    logic [2*DATA_WIDTH+1:0] diffRdData;
     
     assign diffRdConsent = (rdCntR == 1) ? resultValid : 0;
         
     fifo #(
-        .DATA_WIDTH(DATA_WIDTH+1))
+        .DATA_WIDTH(2*(DATA_WIDTH+1)))
         diff_fifo (
         .clkIn(clk),
         .rstIn(rst),
@@ -107,6 +127,9 @@ module radix_2_butterfly_tb #(
         .rdConsentIn(diffRdConsent),
         .rdDataOut(diffRdData));
         
+    logic [DATA_WIDTH:0] expectedVar;
+    logic [DATA_WIDTH:0] resultVar;
+    
     always @(posedge clk) begin
         if (rst) begin
             rdCntR <= 0;
@@ -121,16 +144,30 @@ module radix_2_butterfly_tb #(
                     if (!sumRdValid) begin
                         $error("Expected sumRdValid = 1 when resultValid = 1");
                     end
-                    if (sumRdData !== result) begin
-                        $error("Result (0x%09X) does not matched Expected Result (0x%09X)", result, sumRdData);
+                    expectedVar = sumRdData[DATA_WIDTH:0];
+                    resultVar   = unpackReal(result.re, DATA_WIDTH+1);
+                    if (expectedVar !== resultVar) begin
+                        $error("Real part of result: %d does not matched expected value: %d", resultVar, expectedVar);
+                    end
+                    expectedVar = sumRdData[2*DATA_WIDTH+1:DATA_WIDTH+1];
+                    resultVar   = unpackReal(result.im, DATA_WIDTH+1);
+                    if (expectedVar !== resultVar) begin
+                        $error("Imaginary part of result: %d does not matched expected value: %d", resultVar, expectedVar);
                     end
                 end
                 else begin
                     if(!diffRdValid) begin
                         $error("Expected diffRdValid = 1 when resultValid = 1");
                     end
-                    if (diffRdData !== result) begin
-                        $error("Result (0x%09X) does not matched Expected Result (0x%09X)", result, diffRdData);
+                    expectedVar = diffRdData[DATA_WIDTH:0];
+                    resultVar   = unpackReal(result.re, DATA_WIDTH+1);
+                    if (expectedVar !== resultVar) begin
+                        $error("Real part of result: %d does not matched expected value: %d", resultVar, expectedVar);
+                    end
+                    expectedVar = diffRdData[2*DATA_WIDTH+1:DATA_WIDTH+1];
+                    resultVar   = unpackReal(result.im, DATA_WIDTH+1);
+                    if (expectedVar !== resultVar) begin
+                        $error("Imaginary part of result: %d does not matched expected value: %d", resultVar, expectedVar);
                     end
                 end
             end

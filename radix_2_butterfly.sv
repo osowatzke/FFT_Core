@@ -1,15 +1,16 @@
 `timescale 1ns/1ns
+`include "complex_types.svh"
 
 module radix_2_butterfly #(
     parameter DATA_WIDTH = 16
 ) (
-    input  logic clkIn,
-    input  logic rstIn,
-    input  logic enIn,
-    input  logic validIn,
-    input  logic [DATA_WIDTH-1:0] dataIn,
-    output logic validOut,
-    output logic [DATA_WIDTH:0] dataOut
+    input  logic       clkIn,
+    input  logic       rstIn,
+    input  logic       enIn,
+    input  logic       validIn,
+    input  ComplexType dataIn,
+    output logic       validOut,
+    output ComplexType dataOut
 );
 
     // X[k] = sum( x[n] * e^{j*2*pi*n*k/N} )
@@ -44,31 +45,49 @@ module radix_2_butterfly #(
         end
     end
     
-    logic signed [DATA_WIDTH:0] dataExtend;
-    logic signed [DATA_WIDTH:0] dataExtendR;
-    logic signed [1:0][DATA_WIDTH:0] dataR;
-    logic signed [DATA_WIDTH:0] dataOutR;
+    logic [DATA_WIDTH-1:0] dataRe;
+    logic [DATA_WIDTH-1:0] dataIm;
     
-    assign dataExtend = {dataIn[DATA_WIDTH-1], dataIn};
+    assign dataRe = unpackReal(dataIn.re, DATA_WIDTH);
+    assign dataIm = unpackReal(dataIn.im, DATA_WIDTH);
+    
+    logic signed [DATA_WIDTH:0] dataExtendRe;
+    logic signed [DATA_WIDTH:0] dataExtendIm;
+    
+    assign dataExtendRe = {dataRe[DATA_WIDTH-1], dataRe};
+    assign dataExtendIm = {dataIm[DATA_WIDTH-1], dataIm};
+    
+    logic signed [DATA_WIDTH:0] dataExtendReR;
+    logic signed [DATA_WIDTH:0] dataExtendImR;
+    logic signed [1:0][DATA_WIDTH:0] dataReR;
+    logic signed [1:0][DATA_WIDTH:0] dataImR;
+    logic signed [DATA_WIDTH:0] dataOutReR;
+    logic signed [DATA_WIDTH:0] dataOutImR;
     
     always @(posedge clkIn) begin
         if (enIn) begin
             case (stateR)
                 DATA_0 : begin
-                    dataExtendR <= dataExtend;
-                    dataR[1]    <= -dataR[1];
+                    dataExtendReR   <= dataExtendRe;
+                    dataExtendImR   <= dataExtendIm;
+                    dataReR[1]      <= -dataReR[1];
+                    dataImR[1]      <= -dataImR[1];
                 end
                 DATA_1 : begin
-                    dataR[0]    <= dataExtendR;
-                    dataR[1]    <= dataExtend;
+                    dataReR[0]      <= dataExtendReR;
+                    dataImR[0]      <= dataExtendImR;
+                    dataReR[1]      <= dataExtendRe;
+                    dataImR[1]      <= dataExtendIm;
                 end
             endcase
             
-            dataOutR          <= dataR[0] + dataR[1];
+            dataOutReR              <= dataReR[0] + dataReR[1];
+            dataOutImR              <= dataImR[0] + dataImR[1];
         end
     end
     
-    assign dataOut  = dataOutR;
-    assign validOut = validR[2];
+    assign dataOut.re = packReal($unsigned(dataOutReR), DATA_WIDTH+1);
+    assign dataOut.im = packReal($unsigned(dataOutImR), DATA_WIDTH+1);
+    assign validOut   = validR[2];
     
 endmodule
