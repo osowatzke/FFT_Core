@@ -9,7 +9,7 @@ module fifo #(
     input  logic [DATA_WIDTH-1:0] wrDataIn,
     output logic rdValidOut,
     input  logic rdConsentIn,
-    output logic rdDataOut);
+    output logic [DATA_WIDTH-1:0] rdDataOut);
     
     localparam ADDR_WIDTH = $clog2(DEPTH);
     
@@ -18,6 +18,7 @@ module fifo #(
     logic [ADDR_WIDTH:0] countR;
     logic rdValidR;
     logic wrConsentR;
+    logic rstR;
     
     logic wrValid;
     logic rdValid;
@@ -26,6 +27,7 @@ module fifo #(
     assign rdValid = rdValidR & rdConsentIn;
     
     always @(posedge clkIn) begin
+        rstR                    <= rstIn;
         if (rstIn) begin
             wrAddrR             <= 0;
             rdAddrR             <= 0;
@@ -33,6 +35,9 @@ module fifo #(
             rdValidR            <= 0;
             wrConsentR          <= 0;
         end else begin
+            if (rstR) begin
+                wrConsentR      <= 1;
+            end
             if (wrValid) begin
                 wrAddrR         <= wrAddrR + 1;
             end
@@ -54,6 +59,9 @@ module fifo #(
             end
         end
     end
+    
+    assign rdValidOut = rdValidR;
+    assign wrConsentOut = wrConsentR;
     
     dp_ram #(
         .ADDR_WIDTH(ADDR_WIDTH),
