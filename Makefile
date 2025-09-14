@@ -20,11 +20,10 @@ DISABLED_WARNINGS := \
 .PHONY: all clean
 
 all: $(EXECUTABLE)
-    rm "waveform.vcd"
     $(EXECUTABLE)
     
 $(EXECUTABLE): $(SOURCES)
-    verilator --binary --timing --trace $(SOURCES) $(DISABLED_WARNINGS)
+    verilator --binary --timing --trace --trace-structs $(SOURCES) $(DISABLED_WARNINGS)
 
 clean:
     rm -rf obj_dir
